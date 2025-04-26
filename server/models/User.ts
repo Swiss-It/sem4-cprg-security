@@ -1,14 +1,22 @@
 import { Model, Schema, Document } from 'mongoose';
 import mongoose from 'mongoose';
+import bcrypt from 'bcrypt';
 
 export interface IUser extends Document {
-  name: string;
+  githubId?: string;
+  username: string;
   email: string;
   password: string;
+  comparePassword(password: string): Promise<boolean>;
 }
 
+// Database User Schema
 const UserSchema = new Schema<IUser>({
-  name: {
+  githubId: {
+    type: String,
+    unique: true,
+  },
+  username: {
     type: String,
     required: true,
   },
@@ -23,4 +31,22 @@ const UserSchema = new Schema<IUser>({
   },
 });
 
-export const User: Model<IUser> = mongoose.model('User', UserSchema);
+//Securing password with salted hash before saving to database
+UserSchema.pre<IUser>('save', async function (next) {
+    if (!this.isModified('password')) {
+        return next(); 
+    }
+    try {
+        this.password = await bcrypt.hash(this.password, 10);
+        next();
+    } catch (error) {
+        next(error);
+    }
+});
+
+// Compare password
+UserSchema.methods.comparePassword = async function (password: string): Promise<boolean> {
+        return bcrypt.compare(password, this.password!);
+    };
+
+export const User: Model<IUser> = mongoose.model<IUser>('User', UserSchema);
