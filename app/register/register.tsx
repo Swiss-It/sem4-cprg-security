@@ -102,6 +102,7 @@ export function RegisterForm() {
                                 id="email"
                                 name="email"
                                 type="email"
+                                autoComplete="email"
                                 required
                                 placeholder="Email address"
                                 value={formData.email}
@@ -115,6 +116,7 @@ export function RegisterForm() {
                                 id="password"
                                 name="password"
                                 type="password"
+                                autoComplete="new-password"
                                 required
                                 placeholder="Password"
                                 value={formData.password}

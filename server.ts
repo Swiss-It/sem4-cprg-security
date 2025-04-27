@@ -3,10 +3,13 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
 import authenticateRoutes from './server/routes/authenticateRoutes';
+import adminRoutes from './server/routes/adminRoutes';
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
+import cors from 'cors';
 
 const app = express();
 
@@ -20,6 +23,7 @@ const {
   NODE_ENV,
   SSL_KEY_PATH,
   SSL_CERT_PATH,
+  FRONTEND_URL,
 } = process.env;
 
 //Check if all required environment variables are set
@@ -80,16 +84,36 @@ app.use(helmet({
   } : false,
 }));
 
+const AllowedOrigins = FRONTEND_URL ? [FRONTEND_URL] : [];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (AllowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+    },
+    credentials: true,
+}));
+
 // This take our passport config and initializes it
 import passport from './server/auth/passportConfig';
 app.use(passport.initialize());
+
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+  message: 'Too many requests from this IP, please try again after an hour.',
+});
 
 app.use((req, res, next) => {
   console.log(`Request reaching before /api/auth: ${req.method} ${req.path}`);
   next();
 });
 
-app.use('/api/auth', authenticateRoutes);
+app.use('/api/auth', authRateLimiter, authenticateRoutes);
+app.use('/api/admin', authenticateJWT, checkRole('admin'), adminRoutes);
 
 //This is for connecting to Mongo DB
 mongoose.connect(MONGO_URI)

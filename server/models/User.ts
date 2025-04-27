@@ -9,6 +9,11 @@ export interface IUser extends Document {
   email: string;
   password: string;
   bio?: string;
+  passwordReset: {
+    token: string;
+    expires: Date;
+  },
+  role: string;
   comparePassword(password: string): Promise<boolean>;
 }
 
@@ -30,6 +35,25 @@ const UserSchema = new Schema<IUser>({
   password: {
     type: String,
     required: true,
+  },
+  bio: {
+    type: String,
+    default: '',
+  },
+  passwordReset: {
+    token: {
+      type: String,
+      default: '',
+    },
+    expires: {
+      type: Date,
+      default: null,
+    },
+  },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user',
   },
 });
 
