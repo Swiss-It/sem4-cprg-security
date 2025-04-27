@@ -1,3 +1,10 @@
+# IDD - Web Security Project
+
+A test web application that allows users to register, login, and manage their profiles, using modern security features.
+
+
+
+
 # Welcome to React Router!
 
 A modern, production-ready template for building full-stack React applications using React Router.

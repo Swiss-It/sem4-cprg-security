@@ -10,38 +10,37 @@ import React, {
 // Use react-router-dom's useNavigate for SPA navigation
 import { useNavigate } from 'react-router';
 
-// Define a local type for the user data the frontend expects.
+// Define the user type the frontend expects (should match backend minus password)
 interface FrontendUser {
-  _id: string; // Assuming the user ID is always present
+  _id: string;
   username: string;
   email: string;
-  // Add other properties you expect the user object to have, excluding password
+  role: string; // Make sure role is included
+  bio?: string;
+  githubId?: string; // Include other fields returned by API
+  // Add other fields you expect from the /api/auth/session or /api/auth/profile endpoints
 }
 
 // --- Define the shape of the context value ---
 interface AuthContextType {
-  user: FrontendUser | null; // Current user or null
-  login: (credentials: any) => Promise<void>; // Local login
-  loginWithGithub: () => void; // Initiate GitHub OAuth flow
-  // Removed handleOAuthCallback as the backend handles the cookie
-  logout: () => Promise<void>; // Logout function
-  isLoading: boolean; // Loading state indicator
+  user: FrontendUser | null;
+  login: (credentials: any) => Promise<void>;
+  loginWithGithub: () => void;
+  logout: () => Promise<void>;
+  isLoading: boolean;
+  updateUser: ( // <-- ADD THIS LINE
+    userData: Partial<FrontendUser & { password?: string }>,
+  ) => Promise<void>;
 }
 
 // --- Create the context with a default value ---
-// Provide a sensible default that matches AuthContextType
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  login: async () => {
-    /* Default */
-  },
-  loginWithGithub: () => {
-    /* Default */
-  },
-  logout: async () => {
-    /* Default */
-  },
-  isLoading: true, // Start loading until initial check is done
+  login: async () => {},
+  loginWithGithub: () => {},
+  logout: async () => {},
+  isLoading: true,
+  updateUser: async () => {}, // <-- ADD DEFAULT IMPLEMENTATION
 });
 
 // --- Define Props for the Provider ---
@@ -52,8 +51,7 @@ interface AuthProviderProps {
 // --- Create the Provider Component ---
 export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<FrontendUser | null>(null);
-  // Initialize token state to null - it will be set in useEffect on the client
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Start loading
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const navigate = useNavigate();
 
   // --- Fetch User Data based on Token ---
@@ -145,30 +143,85 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // --- Logout Function ---
-  // The backend now clears the HttpOnly cookie
   const logout = async (): Promise<void> => {
-    setIsLoading(true); // Indicate loading state
-    console.log('Attempting logout...');
+    console.log('[AuthContext:logout] Initiating logout...');
+    // Setting isLoading here might be unnecessary and could contribute to issues
+    // setIsLoading(true);
+
     try {
-      // Call the backend logout endpoint to clear the HttpOnly cookie
-      const response = await fetch('/api/auth/logout', { method: 'POST' }); // Use POST
+      // 1. Call backend to clear the HttpOnly cookie
+      console.log('[AuthContext:logout] Calling backend /api/auth/logout...');
+      const response = await fetch('/api/auth/logout', { method: 'POST' });
 
       if (!response.ok) {
-           console.warn('Logout endpoint returned non-OK status:', response.status);
-           // Continue client-side cleanup even if backend call fails
+        // Log warning but proceed with client-side cleanup anyway
+        console.warn(
+          `[AuthContext:logout] Backend logout endpoint returned status ${response.status}`,
+        );
+      } else {
+        console.log(
+          '[AuthContext:logout] Backend logout successful (cookie should be cleared).',
+        );
       }
-      console.log('Backend logout endpoint called. Clearing client state...');
+    } catch (error) {
+      console.error('[AuthContext:logout] Error calling backend logout:', error);
+      // Proceed with client-side cleanup even if backend call fails
+    } finally {
+      // 2. Clear the user state on the client *after* backend attempt
+      console.log('[AuthContext:logout] Clearing client-side user state.');
+      setUser(null);
+
+      // 3. Ensure isLoading is false *before* navigating
+      // If isLoading is true, ProtectedRoute might show "Loading..." instead of letting navigation happen
+      setIsLoading(false);
+
+      // 4. Navigate to the login page
+      console.log('[AuthContext:logout] Navigating to /login...');
+      // Use replace: true so the logged-out page isn't in the browser history
+      navigate('/login', { replace: true });
+      console.log('[AuthContext:logout] Navigation to /login requested.');
+    }
+  };
+
+  // Update user function
+  const updateUser = async (
+    userData: Partial<FrontendUser & { password?: string }>,
+  ): Promise<void> => {
+    console.log('Attempting to update user profile via context...');
+    try {
+      // Call the backend API endpoint you created in Step 3
+      const response = await fetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          // The HttpOnly cookie is sent automatically by the browser
+        },
+        body: JSON.stringify(userData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('API Error updating profile:', errorData);
+        throw new Error(
+          errorData.message || `Profile update failed: ${response.status}`,
+        );
+      }
+
+      const data = await response.json(); // Expect { message: string, user: FrontendUser }
+
+      if (!data.user) {
+        throw new Error('Profile update response missing user data.');
+      }
+
+      // IMPORTANT: Update the user state in the context with the fresh data from the API
+      setUser(data.user);
+      console.log('User profile updated successfully in context.');
+      // You might want to show a success notification here using a state management library or prop drilling
 
     } catch (error) {
-      console.error('Logout API call error:', error);
-      // Continue client-side cleanup even if network error occurs
-    } finally {
-      // Essential client-side cleanup:
-      setUser(null); // Clear user state
-      setIsLoading(false); // Finish loading
-      console.log('Client-side logout complete. Cookie cleared by backend.');
-      navigate('/login'); // Redirect to login page
+      console.error('Context updateUser error:', error);
+      // Re-throw the error so the calling component (ProfilePage) can catch it and display a message
+      throw error;
     }
   };
 
@@ -192,6 +245,7 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
     loginWithGithub,
     logout,
     isLoading,
+    updateUser,
   };
 
   // Render the provider with the context value

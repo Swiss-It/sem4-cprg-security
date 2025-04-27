@@ -2,14 +2,16 @@ import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
-import authenticateRoutes from './server/routes/authenticateRoutes';
-import adminRoutes from './server/routes/adminRoutes';
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
+
+// Route Impoorts
+import authenticateRoutes from './server/routes/authenticateRoutes';
+import adminRoutes from './server/routes/adminRoutes';
 
 const app = express();
 
@@ -66,6 +68,10 @@ if (NODE_ENV !== 'production') {
 }
 
 //Middleware
+import {
+  authenticateJWT,
+  checkRole,
+} from './server/middleware/authMiddleware';
 app.use(express.json());
 app.use(cookieParser());
 
@@ -103,7 +109,7 @@ app.use(passport.initialize());
 
 const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+  max: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
   message: 'Too many requests from this IP, please try again after an hour.',
 });
 

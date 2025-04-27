@@ -49,30 +49,46 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
           return;
       }
 
-      // Attach user to request object (consider declaration merging for req.user type)
-      // @ts-ignore // Temporary ignore if req.user type isn't extended
       req.user = user;
-      next(); // Proceed to the next middleware/route handler
+      next();
 
   } catch (error: any) {
       console.error('JWT Authentication error:', error.message);
       // Handle specific JWT errors (e.g., expired token)
-      if (error.name === 'TokenExpiredError') {
-           res.status(401).json({ message: 'Unauthorized - Token expired' });
-           return;
+        if (error.name === 'TokenExpiredError') {
+            res.status(401).json({ message: 'Unauthorized - Token expired' });
+            return;
       }
-       if (error.name === 'JsonWebTokenError') {
-           res.status(401).json({ message: 'Unauthorized - Invalid token signature' });
-           return;
+        if (error.name === 'JsonWebTokenError') {
+            res.status(401).json({ message: 'Unauthorized - Invalid token signature' });
+            return;
       }
       // Generic error for other cases
       res.status(401).json({ message: 'Unauthorized - Invalid token' });
-      // No return needed here as response is sent
   }
+};
+
+// RBAC Middleware
+export const checkRole = (allowedRoles: string | string[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      //Technically should get caught by authenticateJWT middleware, but just being safe
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+    const roles = Array.isArray(allowedRoles)
+    ?allowedRoles : [allowedRoles];
+    const userRoles = req.user.role;
+
+    if (roles.includes(userRoles)) {
+      next();
+    } else {
+      res.status(403).json({ message: 'Forbidden: Access denied.' });
+    }
+  };
 };
 
 export const generateToken = (userId: string): string => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET as string, {
-    expiresIn: '24h' // Token expires after 24 hours
+    expiresIn: '15m' // Token expires after 24 hours
   });
 };
