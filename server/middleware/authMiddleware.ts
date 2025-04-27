@@ -1,32 +1,26 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
+import type { IUser } from '../models/User';
 
 // Extend Express Request type to include user property
 declare global {
   namespace Express {
     interface Request {
-      user?: any;
+      user?: IUser;
     }
   }
 }
 
 export const authenticateJWT = async (req: Request, res: Response, next: NextFunction): Promise<void> => { // Return Promise<void>
   try {
-      const authHeader = req.headers.authorization;
+      const token = req.cookies.access_token;
 
-      if (!authHeader) {
-          // Use void return type after sending response
-          res.status(401).json({ message: 'No authorization token provided' });
-          return;
-      }
-
-      // Extract token - expected format: "Bearer <token>"
-      const token = authHeader.split(' ')[1];
+      console.log('Token from cookie:', token); // Debugging line
 
       if (!token) {
           // Use void return type after sending response
-          res.status(401).json({ message: 'Invalid token format' });
+          res.status(401).json({ message: 'No authorization token provided in cookie' });
           return;
       }
 
@@ -39,10 +33,15 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
           return;
       }
 
+      // Ensure the payload structure matches how the token was signed (using 'id')
       const decoded = jwt.verify(token, jwtSecret) as { id: string };
 
-      // Find user by ID from token payload
+      console.log('Decoded JWT payload ID:', decoded.id); // Debugging line: Log the ID being used
+
+      // Find user by ID from token payload using 'decoded.id'
       const user = await User.findById(decoded.id);
+
+      console.log('User found by findById:', user); // Debugging line: Log the result (null or user object)
 
       if (!user) {
           // Use void return type after sending response

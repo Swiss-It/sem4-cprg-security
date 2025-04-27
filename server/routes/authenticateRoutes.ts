@@ -8,6 +8,26 @@ import { authenticateJWT, generateToken } from 'server/middleware/authMiddleware
 
 const router = express.Router();
 
+// Helper function to set JWT cookie
+const setJwtCookie = (res: Response, token: string) => {
+    res.cookie('access_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+    });
+};
+
+// Helper function to clear JWT cookie
+const clearJWTCookie = (res: Response) => {
+    res.cookie('access_token', '', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        expires: new Date(0), //
+    });
+};
+
 // Register route
 router.post(
     '/register',
@@ -31,13 +51,16 @@ router.post(
 
             // Generate JWT token
             const token = generateToken(user._id.toString());
+
+            // Configure JWT Storage to httpOnly cookie
+            setJwtCookie (res, token);
             
             const userData = user.toObject();
             delete userData.password;
             
             res.status(201).json({
               message: 'User registered successfully',
-              token,
+              // Removed token from response
               user: userData
             });
         } catch (error: any) {
@@ -59,6 +82,9 @@ router.post('/login', (req, res, next) => {
 
     // Generate JWT token
     const token = generateToken(user._id.toString());
+
+    // Set JWT in an httpOnly cookie
+    setJwtCookie(res, token);
     
     // Return user info and token
     const userData = user.toObject();
@@ -89,14 +115,23 @@ router.get(
         session: false,
         failureRedirect: '/login?error=github_failed'
     }),
-    
-    (req, res) => {
+    (req: Request, res:Response) => {
+    if (req.user) {
         const frontendDashboardUrl = `${process.env.FRONTEND_URL || 'https://localhost:5173'}/dashboard`;
+
         // Generate JWT token
         const token = generateToken(req.user._id.toString());
+
+        setJwtCookie(res, token);
+
+        console.log('GitHub login successful. Redirecting to frontend.', token);
         
         // Redirect to frontend with token
         res.redirect(`${frontendDashboardUrl}?token=${token}`);
+        } else {
+            // Redirect to fronted if user is not authenticated(most likely won't reach this point)
+            res.redirect(`${process.env.FRONTEND_URL || 'https://localhost:5173'}/login?error=auth_failed`);
+        }
     }
 );
 
@@ -104,6 +139,9 @@ router.get(
 // Logout route
 router.get('/logout', (req: Request, res: Response, next: NextFunction) => {
     console.log('JWT logout request received.');
+
+    //Clear the httponly cookie
+    clearJWTCookie(res)
 
     // Send a success response - client should handle token removal & redirection
     res.status(200).json({ message: 'Logout successful. Please discard your token.' });
@@ -117,6 +155,9 @@ router.get('/session', authenticateJWT, (req: Request, res: Response) => {
     // If authenticateJWT calls next(), req.user should be populated.
     // Need to ensure req.user type is correctly inferred or asserted.
     // @ts-ignore // Temporary ignore if req.user type isn't extended
+
+    console.log('User data from session:', req.user);
+    
     const userObject = req.user?._doc || req.user;
 
     if (!userObject) {

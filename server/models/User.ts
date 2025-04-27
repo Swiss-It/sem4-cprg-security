@@ -3,10 +3,12 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 
 export interface IUser extends Document {
+  _id: mongoose.Types.ObjectId;
   githubId?: string;
   username: string;
   email: string;
   password: string;
+  bio?: string;
   comparePassword(password: string): Promise<boolean>;
 }
 

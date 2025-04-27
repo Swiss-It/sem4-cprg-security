@@ -9,47 +9,38 @@ import React, {
 } from 'react';
 // Use react-router-dom's useNavigate for SPA navigation
 import { useNavigate } from 'react-router';
-import type { IUser } from 'server/models/User'; // Adjust path as needed
 
-// --- Helper Functions for Token Storage ---
-// Encapsulate localStorage access
-// IMPORTANT: These functions should only be *called* on the client-side.
-const storeToken = (token: string): void => {
-    if (typeof window !== 'undefined') { // Check if running in browser
-      localStorage.setItem('auth_token', token);
-    }
-};
-const getToken = (): string | null => {
-    if (typeof window !== 'undefined') { // Check if running in browser
-      return localStorage.getItem('auth_token');
-    }
-    return null; // Return null if not in browser
-};
-const removeToken = (): void => {
-     if (typeof window !== 'undefined') { // Check if running in browser
-       localStorage.removeItem('auth_token');
-     }
-};
+// Define a local type for the user data the frontend expects.
+interface FrontendUser {
+  _id: string; // Assuming the user ID is always present
+  username: string;
+  email: string;
+  // Add other properties you expect the user object to have, excluding password
+}
 
 // --- Define the shape of the context value ---
 interface AuthContextType {
-  user: IUser | null; // Current user or null
-  token: string | null; // Store the token itself in context (optional, but can be useful)
+  user: FrontendUser | null; // Current user or null
   login: (credentials: any) => Promise<void>; // Local login
   loginWithGithub: () => void; // Initiate GitHub OAuth flow
-  handleOAuthCallback: (token: string) => Promise<void>; // Process token after OAuth redirect
+  // Removed handleOAuthCallback as the backend handles the cookie
   logout: () => Promise<void>; // Logout function
   isLoading: boolean; // Loading state indicator
 }
 
 // --- Create the context with a default value ---
-const AuthContext: Context<AuthContextType> = createContext<AuthContextType>({
+// Provide a sensible default that matches AuthContextType
+const AuthContext = createContext<AuthContextType>({
   user: null,
-  token: null,
-  login: async () => { /* Default */ },
-  loginWithGithub: () => { /* Default */ },
-  handleOAuthCallback: async () => { /* Default */ },
-  logout: async () => { /* Default */ },
+  login: async () => {
+    /* Default */
+  },
+  loginWithGithub: () => {
+    /* Default */
+  },
+  logout: async () => {
+    /* Default */
+  },
   isLoading: true, // Start loading until initial check is done
 });
 
@@ -60,54 +51,59 @@ interface AuthProviderProps {
 
 // --- Create the Provider Component ---
 export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<IUser | null>(null);
+  const [user, setUser] = useState<FrontendUser | null>(null);
   // Initialize token state to null - it will be set in useEffect on the client
-  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true); // Start loading
   const navigate = useNavigate();
 
   // --- Fetch User Data based on Token ---
   // Helper function to get user data if a token exists
-  const fetchUserFromToken = async (currentToken: string): Promise<void> => {
+  const fetchUserSession = async (): Promise<void> => {
      console.log('Attempting to fetch user data with token...');
+     setIsLoading(true);
      // Don't set isLoading here, it's handled by the initial useEffect check
      // setIsLoading(true);
      try {
-        const response = await fetch('/api/auth/session', { // Use the JWT-protected endpoint
-          headers: {
-            'Authorization': `Bearer ${currentToken}`
-          }
-        });
+      // The browser automatically includes the HttpOnly cookie in this request
+      const response = await fetch('/api/auth/session');
 
-        if (response.ok) {
-          const data = await response.json();
+      if (response.ok) {
+        const data = await response.json();
+        // We expect the backend to return the user data if the cookie is valid
+        if (data.user) {
           setUser(data.user); // Set user data from response
-          console.log('User data fetched successfully:', data.user);
+          console.log('User session found and data fetched successfully.');
         } else {
-          // Token is invalid or expired, or other server error
-          console.error('Failed to fetch user data, status:', response.status);
-          removeToken(); // Remove invalid token from storage
-          setToken(null); // Clear token state
-          setUser(null);  // Clear user state
+          // This case might indicate a backend issue, but handle it
+          console.warn('Session endpoint returned OK but no user data.');
+          setUser(null);
         }
-      } catch (error) {
-        console.error("Error fetching user data:", error);
-        removeToken(); // Remove token on error
-        setToken(null); // Clear token state
-        setUser(null);  // Clear user state
-      } finally {
-         // setIsLoading(false); // Loading is handled by the initial useEffect
+      } else if (response.status === 401) {
+        // 401 means the cookie was missing or invalid/expired
+        console.log('No valid user session found (401 Unauthorized).');
+        setUser(null); // Ensure user is null if unauthorized
+        // The backend should handle clearing the cookie on its end if it's expired
+      } else {
+        // Handle other potential errors during the session check
+        console.error('Error fetching user session, status:', response.status);
+        setUser(null);
       }
+    } catch (error) {
+      console.error('Network or other error during session fetch:', error);
+      setUser(null);
+    } finally {
+      setIsLoading(false); // Finish loading after the session check
+    }
   };
 
 
   // --- Local Login Function ---
-  // Assumes the backend /api/auth/login returns { user: ..., token: ... }
+  // Now, the backend sets the HttpOnly cookie directly
   const login = async (credentials: any): Promise<void> => {
     setIsLoading(true); // Set loading during login attempt
     console.log('Attempting local login...');
     try {
-      const response = await fetch('/api/auth/login', { // ** This backend route needs to be updated for JWT **
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials),
@@ -115,26 +111,25 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || `Login failed with status: ${response.status}`);
+        throw new Error(
+          errorData.message || `Login failed with status: ${response.status}`,
+        );
       }
 
-      const data = await response.json(); // Expect { user: IUser, token: string }
+      const data = await response.json(); // Expect { user: IUser, message: string }
 
-      if (!data.token || !data.user) {
-           throw new Error('Login response missing token or user data.');
+      if (!data.user) {
+        throw new Error('Login response missing user data.');
       }
 
-      storeToken(data.token); // Store the JWT token in localStorage
-      setToken(data.token);   // Update context state
-      setUser(data.user);     // Update context state
-      console.log('Local login successful.');
+      // The backend has set the HttpOnly cookie. We don't handle the token here.
+      setUser(data.user); // Update context state with user data
+      console.log('Local login successful. Cookie set by backend.');
       navigate('/dashboard'); // Navigate after successful login
 
     } catch (error) {
-      console.error("Local login error:", error);
-      removeToken(); // Clear any potentially bad token
-      setToken(null);
-      setUser(null);
+      console.error('Local login error:', error);
+      setUser(null); // Clear user state on login failure
       throw error; // Re-throw error for the component to handle
     } finally {
       setIsLoading(false); // Finish loading after login attempt
@@ -144,41 +139,35 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   // --- GitHub Login Initiation ---
   const loginWithGithub = (): void => {
     console.log('Initiating GitHub login...');
-    // Ensure this only runs client-side if there was any doubt
+    // The backend /api/auth/github route will handle the OAuth flow and cookie setting
     if (typeof window !== 'undefined') {
-        window.location.href = '/api/auth/github'; // Backend handles redirect to GitHub
+      window.location.href = '/api/auth/github';
     }
   };
 
-  // --- Handle OAuth Callback ---
-  const handleOAuthCallback = async (receivedToken: string): Promise<void> => {
-        console.log('Handling OAuth callback with received token...');
-        storeToken(receivedToken); // Store the token from callback
-        setToken(receivedToken);   // Set token state
-        // Fetch user data using the new token
-        await fetchUserFromToken(receivedToken);
-        // Navigate to the main application area
-        navigate('/dashboard');
-  };
-
-
-  // --- Logout Function (JWT Approach) ---
+  // --- Logout Function ---
+  // The backend now clears the HttpOnly cookie
   const logout = async (): Promise<void> => {
     setIsLoading(true); // Indicate loading state
-    console.log('Attempting JWT logout...');
+    console.log('Attempting logout...');
     try {
-      // Optional: Call backend endpoint
-      await fetch('/api/auth/logout', { method: 'GET' });
-      console.log('Server logout endpoint acknowledged.');
+      // Call the backend logout endpoint to clear the HttpOnly cookie
+      const response = await fetch('/api/auth/logout', { method: 'POST' }); // Use POST
+
+      if (!response.ok) {
+           console.warn('Logout endpoint returned non-OK status:', response.status);
+           // Continue client-side cleanup even if backend call fails
+      }
+      console.log('Backend logout endpoint called. Clearing client state...');
+
     } catch (error) {
-      console.error("Logout API call error:", error);
+      console.error('Logout API call error:', error);
+      // Continue client-side cleanup even if network error occurs
     } finally {
-      // Essential client-side cleanup for JWT logout:
-      removeToken(); // Remove token from storage
-      setToken(null);  // Clear token state
-      setUser(null);   // Clear user state
+      // Essential client-side cleanup:
+      setUser(null); // Clear user state
       setIsLoading(false); // Finish loading
-      console.log('Client-side logout complete.');
+      console.log('Client-side logout complete. Cookie cleared by backend.');
       navigate('/login'); // Redirect to login page
     }
   };
@@ -186,43 +175,27 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   // --- Effect to check initial authentication status on mount ---
   // This runs only on the client-side after the component mounts
   useEffect(() => {
-    console.log('AuthProvider mounted (Client-side). Checking initial auth status...');
-    // Read token from localStorage *inside* useEffect
-    const currentToken = getToken();
+    console.log(
+      'AuthProvider mounted (Client-side). Checking initial session status...',
+    );
+    // On mount, check for an existing session by calling the /api/auth/session endpoint
+    fetchUserSession();
 
-    if (currentToken) {
-      console.log('Token found in storage. Validating...');
-      setToken(currentToken); // Set token state first
-      fetchUserFromToken(currentToken); // Validate token and fetch user data
-    } else {
-      // No token found, ensure user is null and finish loading
-      console.log('No token found in storage.');
-      setUser(null);
-      setIsLoading(false); // Finish loading as there's no token to check
-    }
+    // We no longer need to manage token state or localStorage here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array ensures this runs only once on initial mount
-
 
   // --- Value provided by the context ---
   const value: AuthContextType = {
     user,
-    token,
     login,
     loginWithGithub,
-    handleOAuthCallback,
     logout,
     isLoading,
   };
 
   // Render the provider with the context value
-  return (
-    <AuthContext.Provider value={value}>
-      {/* Render children, potentially showing loading indicator based on isLoading */}
-      {/* Example: {isLoading ? <p>Loading...</p> : children} */}
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 // --- Custom Hook to use the Auth Context ---
