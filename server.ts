@@ -73,6 +73,34 @@ import {
   checkRole,
 } from './server/middleware/authMiddleware';
 app.use(express.json());
+
+const frontendUrl = FRONTEND_URL; // e.g., https://localhost:5173
+if (!frontendUrl) {
+  console.warn('Warning: FRONTEND_URL not set in .env. CORS might block frontend.');
+}
+const allowedOrigins = frontendUrl ? [frontendUrl] : [];
+console.log('Allowed CORS Origins:', allowedOrigins);
+
+
+//custom cors config for SSO issues
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like same-origin requests or server-to-server) OR from allowed origins
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      // console.log(`CORS check: Allowing origin: ${origin || 'N/A'}`); // Optional: reduce noise
+      callback(null, true);
+    } else {
+      console.error(`CORS check: Blocking origin: ${origin}`);
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    }
+  },
+  credentials: true, // IMPORTANT: Allow cookies/credentials
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Explicitly allow methods
+  allowedHeaders: ['Content-Type', 'Authorization'], // Explicitly allow headers needed
+};
+
+app.use(cors(corsOptions));
+app.use(express.json());
 app.use(cookieParser());
 
 // Configure Helmet with HTTPS
@@ -88,19 +116,6 @@ app.use(helmet({
       includeSubDomains: true,
       preload: true
   } : false,
-}));
-
-const AllowedOrigins = FRONTEND_URL ? [FRONTEND_URL] : [];
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (AllowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-    },
-    credentials: true,
 }));
 
 // This take our passport config and initializes it
@@ -143,6 +158,7 @@ if (sslOptions) {
   https.createServer(sslOptions, app).listen(PORT, () => {
       console.log(`HTTPS Server is running securely on port ${PORT}`);
   });
+  
 } else {
   // Fallback to HTTP server
   app.listen(PORT, () => {

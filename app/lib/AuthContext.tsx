@@ -10,6 +10,13 @@ import React, {
 // Use react-router-dom's useNavigate for SPA navigation
 import { useNavigate } from 'react-router';
 
+// const BACKEND_API_URL = import.meta.env.VITE_BACKEND_API_URL || 'https://localhost:3000/api';
+// console.log('Using Backend API URL:', BACKEND_API_URL);
+
+// if (!BACKEND_API_URL) {
+//   console.error('Error: BACKEND_API_URL environment variable not set.');
+// }
+
 // Define the user type the frontend expects (should match backend minus password)
 interface FrontendUser {
   _id: string;
@@ -59,11 +66,14 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   const fetchUserSession = async (): Promise<void> => {
      console.log('Attempting to fetch user data with token...');
      setIsLoading(true);
+    // Scoped vairable for apiUrl
+     const apiUrl = "/api/auth/session";
      // Don't set isLoading here, it's handled by the initial useEffect check
      // setIsLoading(true);
      try {
       // The browser automatically includes the HttpOnly cookie in this request
-      const response = await fetch('/api/auth/session');
+      const response = await fetch(apiUrl);
+      console.log('AuthContext:fetchUserSession response:', response);
 
       if (response.ok) {
         const data = await response.json();
@@ -100,8 +110,10 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   const login = async (credentials: any): Promise<void> => {
     setIsLoading(true); // Set loading during login attempt
     console.log('Attempting local login...');
+
+    const apiUrl = "/api/auth/login";
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials),
@@ -139,10 +151,12 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
     console.log('Initiating GitHub login...');
     // The backend /api/auth/github route will handle the OAuth flow and cookie setting
     if (typeof window !== 'undefined') {
-      window.location.href = '/api/auth/github';
+      const absoluteBackendUrl = import.meta.env.VITE_BACKEND_API_URL || 'https://localhost:3000/api';
+      window.location.href = `${absoluteBackendUrl}/api/auth/github`;
     }
   };
 
+  // Logout Function
   const logout = async (): Promise<void> => {
     console.log('[AuthContext:logout] Initiating logout...');
     // Setting isLoading here might be unnecessary and could contribute to issues
@@ -151,7 +165,9 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
     try {
       // 1. Call backend to clear the HttpOnly cookie
       console.log('[AuthContext:logout] Calling backend /api/auth/logout...');
-      const response = await fetch('/api/auth/logout', { method: 'POST' });
+
+      const apiUrl = "/api/auth/logout";
+      const response = await fetch(apiUrl, { method: 'POST' });
 
       if (!response.ok) {
         // Log warning but proceed with client-side cleanup anyway
@@ -190,7 +206,8 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
     console.log('Attempting to update user profile via context...');
     try {
       // Call the backend API endpoint you created in Step 3
-      const response = await fetch('/api/auth/profile', {
+      const apiUrl = "/api/auth/profile";
+      const response = await fetch(apiUrl, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

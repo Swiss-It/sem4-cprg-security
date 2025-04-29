@@ -1,6 +1,7 @@
 // In your LoginPage.tsx file
 
 import React from 'react';
+import { Link } from 'react-router';
 import { useAuth } from '~/lib/AuthContext';
 
 export function LoginPage() {
@@ -68,7 +69,7 @@ export function LoginPage() {
                         <button
                             type="submit"
                             disabled={auth.isLoading}
-                            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
                         >
                             Login
                         </button>
@@ -89,6 +90,10 @@ export function LoginPage() {
 </svg>
 
                         </button>
+                        <p className="text-sm text-center text-black">
+                        Don't have an account?{' '}
+                        <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500">Sign up</Link>
+                        </p>
                     </div>
                 </form>
             </div>

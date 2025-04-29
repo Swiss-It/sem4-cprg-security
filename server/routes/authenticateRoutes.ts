@@ -13,7 +13,7 @@ const setJwtCookie = (res: Response, token: string) => {
     res.cookie('access_token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'lax', // Changed from strict due to frontend backend URL mismatch
         maxAge: 60 * 60 * 24 * 30, // 30 days
     });
 };
@@ -88,9 +88,9 @@ router.post('/login', validateLogin, (req: Request, res: Response, next: NextFun
       return;
   }
   
-    passport.authenticate('local', { session: false }, (err, user, info) => {
-    if (err) {
-      return next(err);
+    passport.authenticate('local', { session: false }, (error: any, user: any, info: any) => {
+    if (error) {
+      return next(error);
     }
     if (!user) {
       return res.status(401).json({ message: info?.message || 'Invalid email or password' });
@@ -111,6 +111,7 @@ router.post('/login', validateLogin, (req: Request, res: Response, next: NextFun
       token,
       user: userData 
     });
+
   })(req, res, next);
 });
 
@@ -139,11 +140,10 @@ router.get(
         const token = generateToken(req.user._id.toString());
 
         setJwtCookie(res, token);
-
-        console.log('GitHub login successful. Redirecting to frontend.', token);
+        console.log('Is this cookie being set?', res.getHeaders());
         
         // Redirect to frontend with token
-        res.redirect(`${frontendDashboardUrl}?token=${token}`);
+        res.redirect(`${frontendDashboardUrl}`);
         } else {
             // Redirect to fronted if user is not authenticated(most likely won't reach this point)
             res.redirect(`${process.env.FRONTEND_URL || 'https://localhost:5173'}/login?error=auth_failed`);

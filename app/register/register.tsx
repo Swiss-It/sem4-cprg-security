@@ -72,7 +72,7 @@ export function RegisterForm() {
         <div className="flex items-center justify-center min-h-screen bg-gray-100">
             <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
                 <div className="text-center">
-                    <h2 className="text-2xl font-bold text-gray-900">Create your account</h2>
+                    <h2 className="text-2xl font-bold text-black">Create your account</h2>
                 </div>
 
                 <form className="space-y-6" onSubmit={handleSubmit}>
@@ -84,7 +84,7 @@ export function RegisterForm() {
 
                     <div className="space-y-4">
                         <div className="form-group">
-                            <label htmlFor="username" className="block text-sm font-medium text-gray-700">Username</label>
+                            <label htmlFor="username" className="block text-sm font-medium text-black">Username</label>
                             <input
                                 id="username"
                                 name="username"
@@ -93,12 +93,12 @@ export function RegisterForm() {
                                 placeholder="Username"
                                 value={formData.username}
                                 onChange={handleChange}
-                                className="block w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                className="block w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-black"
                             />
                         </div>
 
                         <div className="form-group">
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
+                            <label htmlFor="email" className="block text-sm font-medium text-black">Email address</label>
                             <input
                                 id="email"
                                 name="email"
@@ -108,12 +108,12 @@ export function RegisterForm() {
                                 placeholder="Email address"
                                 value={formData.email}
                                 onChange={handleChange}
-                                className="block w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                className="block w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-black"
                             />
                         </div>
 
                         <div className="form-group">
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
+                            <label htmlFor="password" className="block text-sm font-medium text-black">Password</label>
                             <input
                                 id="password"
                                 name="password"
@@ -123,12 +123,12 @@ export function RegisterForm() {
                                 placeholder="Password"
                                 value={formData.password}
                                 onChange={handleChange}
-                                className="block w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                className="block w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-black"
                             />
                         </div>
 
                         <div className="form-group">
-                            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">Confirm Password</label>
+                            <label htmlFor="confirmPassword" className="block text-sm font-medium text-black">Confirm Password</label>
                             <input
                                 id="confirmPassword"
                                 name="confirmPassword"
@@ -137,7 +137,7 @@ export function RegisterForm() {
                                 placeholder="Confirm Password"
                                 value={formData.confirmPassword}
                                 onChange={handleChange}
-                                className="block w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                className="block w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-black"
                             />
                         </div>
                     </div>

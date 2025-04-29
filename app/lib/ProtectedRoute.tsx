@@ -28,7 +28,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     console.log('ProtectedRoute: No user found, redirecting to login.');
     // Redirect them to the /login page, but save the current location they were
     // trying to go to. This allows us to send them back after they log in.
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/login"/>;
     // 'replace' prevents the protected route from ending up in the browser history
   }
 

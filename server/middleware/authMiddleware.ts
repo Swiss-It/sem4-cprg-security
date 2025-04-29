@@ -18,8 +18,14 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
 
       console.log('Token from cookie:', token); // Debugging line
 
+      //LOGGING ADDED
+      console.log('[authenticateJWT] Cookies received:', req.cookies);
+      console.log('[authenticateJWT] Access Token from cookie:', token);
+
       if (!token) {
           // Use void return type after sending response
+          //LOGGING ADDED
+          console.log('[authenticateJWT] No token found in cookie.');
           res.status(401).json({ message: 'No authorization token provided in cookie' });
           return;
       }
@@ -34,22 +40,32 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
       }
 
       // Ensure the payload structure matches how the token was signed (using 'id')
+      //LOGGING ADDED
+      console.log('[authenticateJWT] Verifying token...');
       const decoded = jwt.verify(token, jwtSecret) as { id: string };
+      //LOGGING ADDED
+      console.log('[authenticateJWT] Token verified. Decoded ID:', decoded.id);
 
       console.log('Decoded JWT payload ID:', decoded.id); // Debugging line: Log the ID being used
 
       // Find user by ID from token payload using 'decoded.id'
       const user = await User.findById(decoded.id);
 
+      //LOGGING ADDED
+      console.log('[authenticateJWT] User found by ID:', user ? user.email : 'Not Found'); // Log user email or not found
+
       console.log('User found by findById:', user); // Debugging line: Log the result (null or user object)
 
       if (!user) {
           // Use void return type after sending response
+          //LOGGING ADDED
+          console.log('[authenticateJWT] User not found for decoded ID.');
           res.status(401).json({ message: 'User not found for provided token' });
           return;
       }
 
       req.user = user;
+      console.log('[authenticateJWT] Authentication successful. User attached to request.');
       next();
 
   } catch (error: any) {

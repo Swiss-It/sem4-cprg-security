@@ -21,7 +21,7 @@ export interface IUser extends Document {
 const UserSchema = new Schema<IUser>({
   githubId: {
     type: String,
-    unique: true,
+    default: null,
   },
   username: {
     type: String,
@@ -56,6 +56,17 @@ const UserSchema = new Schema<IUser>({
     default: 'user',
   },
 });
+
+//githubId index for first time registration
+UserSchema.index(
+  { githubId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      githubId: { $exists: true, $ne: null }
+    }
+  }
+);
 
 //Securing password with salted hash before saving to database
 UserSchema.pre<IUser>('save', async function (next) {
