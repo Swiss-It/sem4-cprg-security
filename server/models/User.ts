@@ -3,10 +3,17 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 
 export interface IUser extends Document {
+  _id: mongoose.Types.ObjectId;
   githubId?: string;
   username: string;
   email: string;
   password: string;
+  bio?: string;
+  passwordReset: {
+    token: string;
+    expires: Date;
+  },
+  role: string;
   comparePassword(password: string): Promise<boolean>;
 }
 
@@ -14,7 +21,7 @@ export interface IUser extends Document {
 const UserSchema = new Schema<IUser>({
   githubId: {
     type: String,
-    unique: true,
+    default: null,
   },
   username: {
     type: String,
@@ -29,7 +36,37 @@ const UserSchema = new Schema<IUser>({
     type: String,
     required: true,
   },
+  bio: {
+    type: String,
+    default: '',
+  },
+  passwordReset: {
+    token: {
+      type: String,
+      default: '',
+    },
+    expires: {
+      type: Date,
+      default: null,
+    },
+  },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user',
+  },
 });
+
+//githubId index for first time registration
+UserSchema.index(
+  { githubId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      githubId: { $exists: true, $ne: null }
+    }
+  }
+);
 
 //Securing password with salted hash before saving to database
 UserSchema.pre<IUser>('save', async function (next) {

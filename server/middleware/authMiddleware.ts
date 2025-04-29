@@ -1,32 +1,32 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
+import type { IUser } from '../models/User';
 
 // Extend Express Request type to include user property
 declare global {
   namespace Express {
     interface Request {
-      user?: any;
+      user?: IUser;
     }
   }
 }
 
 export const authenticateJWT = async (req: Request, res: Response, next: NextFunction): Promise<void> => { // Return Promise<void>
   try {
-      const authHeader = req.headers.authorization;
+      const token = req.cookies.access_token;
 
-      if (!authHeader) {
-          // Use void return type after sending response
-          res.status(401).json({ message: 'No authorization token provided' });
-          return;
-      }
+      console.log('Token from cookie:', token); // Debugging line
 
-      // Extract token - expected format: "Bearer <token>"
-      const token = authHeader.split(' ')[1];
+      //LOGGING ADDED
+      console.log('[authenticateJWT] Cookies received:', req.cookies);
+      console.log('[authenticateJWT] Access Token from cookie:', token);
 
       if (!token) {
           // Use void return type after sending response
-          res.status(401).json({ message: 'Invalid token format' });
+          //LOGGING ADDED
+          console.log('[authenticateJWT] No token found in cookie.');
+          res.status(401).json({ message: 'No authorization token provided in cookie' });
           return;
       }
 
@@ -39,41 +39,72 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
           return;
       }
 
+      // Ensure the payload structure matches how the token was signed (using 'id')
+      //LOGGING ADDED
+      console.log('[authenticateJWT] Verifying token...');
       const decoded = jwt.verify(token, jwtSecret) as { id: string };
+      //LOGGING ADDED
+      console.log('[authenticateJWT] Token verified. Decoded ID:', decoded.id);
 
-      // Find user by ID from token payload
+      console.log('Decoded JWT payload ID:', decoded.id); // Debugging line: Log the ID being used
+
+      // Find user by ID from token payload using 'decoded.id'
       const user = await User.findById(decoded.id);
+
+      //LOGGING ADDED
+      console.log('[authenticateJWT] User found by ID:', user ? user.email : 'Not Found'); // Log user email or not found
+
+      console.log('User found by findById:', user); // Debugging line: Log the result (null or user object)
 
       if (!user) {
           // Use void return type after sending response
+          //LOGGING ADDED
+          console.log('[authenticateJWT] User not found for decoded ID.');
           res.status(401).json({ message: 'User not found for provided token' });
           return;
       }
 
-      // Attach user to request object (consider declaration merging for req.user type)
-      // @ts-ignore // Temporary ignore if req.user type isn't extended
       req.user = user;
-      next(); // Proceed to the next middleware/route handler
+      console.log('[authenticateJWT] Authentication successful. User attached to request.');
+      next();
 
   } catch (error: any) {
       console.error('JWT Authentication error:', error.message);
       // Handle specific JWT errors (e.g., expired token)
-      if (error.name === 'TokenExpiredError') {
-           res.status(401).json({ message: 'Unauthorized - Token expired' });
-           return;
+        if (error.name === 'TokenExpiredError') {
+            res.status(401).json({ message: 'Unauthorized - Token expired' });
+            return;
       }
-       if (error.name === 'JsonWebTokenError') {
-           res.status(401).json({ message: 'Unauthorized - Invalid token signature' });
-           return;
+        if (error.name === 'JsonWebTokenError') {
+            res.status(401).json({ message: 'Unauthorized - Invalid token signature' });
+            return;
       }
       // Generic error for other cases
       res.status(401).json({ message: 'Unauthorized - Invalid token' });
-      // No return needed here as response is sent
   }
+};
+
+// RBAC Middleware
+export const checkRole = (allowedRoles: string | string[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      //Technically should get caught by authenticateJWT middleware, but just being safe
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+    const roles = Array.isArray(allowedRoles)
+    ?allowedRoles : [allowedRoles];
+    const userRoles = req.user.role;
+
+    if (roles.includes(userRoles)) {
+      next();
+    } else {
+      res.status(403).json({ message: 'Forbidden: Access denied.' });
+    }
+  };
 };
 
 export const generateToken = (userId: string): string => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET as string, {
-    expiresIn: '24h' // Token expires after 24 hours
+    expiresIn: '15m' // Token expires after 24 hours
   });
 };
