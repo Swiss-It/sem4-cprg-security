@@ -5,10 +5,10 @@ import React, {
   useEffect,
   type ReactNode,
   type FC,
-  type Context
+  // Remove unused Context import
 } from 'react';
 // Use react-router-dom's useNavigate for SPA navigation
-import { useNavigate } from 'react-router';
+import { useNavigate } from 'react-router'; // <-- Correct import
 
 // const BACKEND_API_URL = import.meta.env.VITE_BACKEND_API_URL || 'https://localhost:3000/api';
 // console.log('Using Backend API URL:', BACKEND_API_URL);
@@ -31,23 +31,28 @@ interface FrontendUser {
 // --- Define the shape of the context value ---
 interface AuthContextType {
   user: FrontendUser | null;
-  login: (credentials: any) => Promise<void>;
+  // --- MODIFIED: Add csrfToken parameter ---
+  login: (credentials: any, csrfToken: string | null) => Promise<void>;
   loginWithGithub: () => void;
   logout: () => Promise<void>;
   isLoading: boolean;
-  updateUser: ( // <-- ADD THIS LINE
+  updateUser: (
     userData: Partial<FrontendUser & { password?: string }>,
   ) => Promise<void>;
+  // --- ADDED: Expose csrfToken if needed elsewhere, though maybe not necessary ---
+  // csrfToken: string | null;
 }
 
 // --- Create the context with a default value ---
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  // --- MODIFIED: Update default implementation signature ---
   login: async () => {},
   loginWithGithub: () => {},
   logout: async () => {},
   isLoading: true,
-  updateUser: async () => {}, // <-- ADD DEFAULT IMPLEMENTATION
+  updateUser: async () => {},
+  // csrfToken: null, // Add default if exposing token
 });
 
 // --- Define Props for the Provider ---
@@ -59,141 +64,192 @@ interface AuthProviderProps {
 export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<FrontendUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null); // Keep this for updateUser and potentially session checks
   const navigate = useNavigate();
 
-  // --- Fetch User Data based on Token ---
-  // Helper function to get user data if a token exists
-  const fetchUserSession = async (): Promise<void> => {
-     console.log('Attempting to fetch user data with token...');
-     setIsLoading(true);
-    // Scoped vairable for apiUrl
-     const apiUrl = "/api/auth/session";
-     // Don't set isLoading here, it's handled by the initial useEffect check
-     // setIsLoading(true);
-     try {
-      // The browser automatically includes the HttpOnly cookie in this request
-      const response = await fetch(apiUrl);
-      console.log('AuthContext:fetchUserSession response:', response);
-
+  // Function to fetch CSRF token
+  const fetchCsrfToken = async () => {
+    try {
+      console.log('AuthContext: Fetching CSRF token...');
+      const response = await fetch('/api/csrf-token'); // Use relative path
       if (response.ok) {
         const data = await response.json();
-        // We expect the backend to return the user data if the cookie is valid
-        if (data.user) {
-          setUser(data.user); // Set user data from response
-          console.log('User session found and data fetched successfully.');
-        } else {
-          // This case might indicate a backend issue, but handle it
-          console.warn('Session endpoint returned OK but no user data.');
-          setUser(null);
-        }
-      } else if (response.status === 401) {
-        // 401 means the cookie was missing or invalid/expired
-        console.log('No valid user session found (401 Unauthorized).');
-        setUser(null); // Ensure user is null if unauthorized
-        // The backend should handle clearing the cookie on its end if it's expired
+        setCsrfToken(data.csrfToken); // Store token in context state
+        console.log('AuthContext: CSRF token received and stored.');
+        return data.csrfToken; // Return token for immediate use if needed
       } else {
-        // Handle other potential errors during the session check
-        console.error('Error fetching user session, status:', response.status);
-        setUser(null);
+        console.error(
+          'AuthContext: Failed to fetch CSRF token, status:',
+          response.status,
+        );
+        setCsrfToken(null); // Clear on failure
+        return null;
       }
     } catch (error) {
-      console.error('Network or other error during session fetch:', error);
-      setUser(null);
-    } finally {
-      setIsLoading(false); // Finish loading after the session check
+      console.error('AuthContext: Error fetching CSRF token:', error);
+      setCsrfToken(null); // Clear on error
+      return null;
     }
   };
 
+  // --- Fetch User Data based on Token ---
+  const fetchUserSession = async (): Promise<void> => {
+    console.log('AuthContext: Attempting to fetch user session...');
+    setIsLoading(true);
+    const apiUrl = '/api/auth/session'; // Use relative path
+    try {
+      const response = await fetch(apiUrl);
+      console.log('AuthContext: fetchUserSession response status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.user) {
+          setUser(data.user);
+          console.log('AuthContext: User session found.');
+          await fetchCsrfToken(); // Fetch CSRF token for subsequent actions
+        } else {
+          console.warn(
+            'AuthContext: Session endpoint OK but no user data.',
+          );
+          setUser(null);
+          setCsrfToken(null);
+        }
+      } else if (response.status === 401) {
+        console.log(
+          'AuthContext: No valid user session found (401 Unauthorized).',
+        );
+        setUser(null);
+        setCsrfToken(null);
+      } else {
+        console.error(
+          'AuthContext: Error fetching user session, status:',
+          response.status,
+        );
+        setUser(null);
+        setCsrfToken(null);
+      }
+    } catch (error) {
+      console.error(
+        'AuthContext: Network or other error during session fetch:',
+        error,
+      );
+      setUser(null);
+      setCsrfToken(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // --- Local Login Function ---
-  // Now, the backend sets the HttpOnly cookie directly
-  const login = async (credentials: any): Promise<void> => {
-    setIsLoading(true); // Set loading during login attempt
-    console.log('Attempting local login...');
+  // --- MODIFIED: Accept csrfToken parameter ---
+  const login = async (
+    credentials: any,
+    loginCsrfToken: string | null, // Use a different name to avoid confusion with context state
+  ): Promise<void> => {
+    setIsLoading(true);
+    console.log('AuthContext: Attempting local login...');
 
-    const apiUrl = "/api/auth/login";
+    // --- ADDED: Check if CSRF token was provided ---
+    if (!loginCsrfToken) {
+      console.error('AuthContext: Login attempt missing CSRF token.');
+      setIsLoading(false);
+      throw new Error(
+        'Login failed: CSRF token not available. Please refresh.',
+      );
+    }
+
+    const apiUrl = '/api/auth/login'; // Use relative path
     try {
       const response = await fetch(apiUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // --- ADDED: Include CSRF token in the header ---
+          'CSRF-Token': loginCsrfToken,
+        },
         body: JSON.stringify(credentials),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.message || `Login failed with status: ${response.status}`,
-        );
+        // Attempt to parse error message from backend
+        let errorData = { message: `Login failed with status: ${response.status}` };
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          // Ignore if response is not JSON
+          console.warn("Could not parse JSON error response from login endpoint.")
+        }
+        throw new Error(errorData.message);
       }
 
-      const data = await response.json(); // Expect { user: IUser, message: string }
+      const data = await response.json();
 
       if (!data.user) {
         throw new Error('Login response missing user data.');
       }
 
-      // The backend has set the HttpOnly cookie. We don't handle the token here.
-      setUser(data.user); // Update context state with user data
-      console.log('Local login successful. Cookie set by backend.');
-      navigate('/dashboard'); // Navigate after successful login
-
+      setUser(data.user);
+      console.log('AuthContext: Local login successful.');
+      // Fetch a *new* CSRF token after login, as the session might have changed
+      await fetchCsrfToken();
+      navigate('/dashboard');
     } catch (error) {
-      console.error('Local login error:', error);
-      setUser(null); // Clear user state on login failure
-      throw error; // Re-throw error for the component to handle
+      console.error('AuthContext: Local login error:', error);
+      setUser(null);
+      setCsrfToken(null); // Clear context token on failure
+      throw error; // Re-throw for the component
     } finally {
-      setIsLoading(false); // Finish loading after login attempt
+      setIsLoading(false);
     }
   };
 
   // --- GitHub Login Initiation ---
   const loginWithGithub = (): void => {
     console.log('Initiating GitHub login...');
-    // The backend /api/auth/github route will handle the OAuth flow and cookie setting
+    // Use relative path for the redirect
     if (typeof window !== 'undefined') {
-      const absoluteBackendUrl = import.meta.env.VITE_BACKEND_API_URL || 'https://localhost:3000/api';
-      window.location.href = `${absoluteBackendUrl}/api/auth/github`;
+      window.location.href = '/api/auth/github';
     }
   };
 
   // Logout Function
   const logout = async (): Promise<void> => {
     console.log('[AuthContext:logout] Initiating logout...');
-    // Setting isLoading here might be unnecessary and could contribute to issues
-    // setIsLoading(true);
+    // No need to set isLoading true here, can cause UI flashes
+
+    // Store token before clearing state, if needed for logout request
+    const currentCsrfToken = csrfToken;
 
     try {
-      // 1. Call backend to clear the HttpOnly cookie
       console.log('[AuthContext:logout] Calling backend /api/auth/logout...');
-
-      const apiUrl = "/api/auth/logout";
-      const response = await fetch(apiUrl, { method: 'POST' });
+      const apiUrl = '/api/auth/logout'; // Use relative path
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        // --- ADDED: Include CSRF token if your logout requires it ---
+        // If your /logout endpoint is protected by csurf, you need this
+        headers: {
+           ...(currentCsrfToken && { 'CSRF-Token': currentCsrfToken }),
+        },
+      });
 
       if (!response.ok) {
-        // Log warning but proceed with client-side cleanup anyway
         console.warn(
           `[AuthContext:logout] Backend logout endpoint returned status ${response.status}`,
         );
       } else {
         console.log(
-          '[AuthContext:logout] Backend logout successful (cookie should be cleared).',
+          '[AuthContext:logout] Backend logout successful.',
         );
       }
     } catch (error) {
       console.error('[AuthContext:logout] Error calling backend logout:', error);
-      // Proceed with client-side cleanup even if backend call fails
     } finally {
-      // 2. Clear the user state on the client *after* backend attempt
-      console.log('[AuthContext:logout] Clearing client-side user state.');
+      console.log('[AuthContext:logout] Clearing client-side state.');
       setUser(null);
+      setCsrfToken(null); // Clear token
+      setIsLoading(false); // Ensure loading is false
 
-      // 3. Ensure isLoading is false *before* navigating
-      // If isLoading is true, ProtectedRoute might show "Loading..." instead of letting navigation happen
-      setIsLoading(false);
-
-      // 4. Navigate to the login page
       console.log('[AuthContext:logout] Navigating to /login...');
-      // Use replace: true so the logged-out page isn't in the browser history
       navigate('/login', { replace: true });
       console.log('[AuthContext:logout] Navigation to /login requested.');
     }
@@ -203,57 +259,62 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   const updateUser = async (
     userData: Partial<FrontendUser & { password?: string }>,
   ): Promise<void> => {
-    console.log('Attempting to update user profile via context...');
+    console.log('AuthContext: Attempting to update user profile...');
+
+    // Use the token stored in the context's state
+    if (!csrfToken) {
+      console.error('AuthContext: CSRF token not available for updateUser.');
+      throw new Error('CSRF token missing. Please refresh or log in again.');
+    }
+
+    // Remove the duplicate try block
     try {
-      // Call the backend API endpoint you created in Step 3
-      const apiUrl = "/api/auth/profile";
+      const apiUrl = '/api/auth/profile'; // Use relative path
       const response = await fetch(apiUrl, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          // The HttpOnly cookie is sent automatically by the browser
+          'CSRF-Token': csrfToken, // Use token from context state
         },
         body: JSON.stringify(userData),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('API Error updating profile:', errorData);
-        throw new Error(
-          errorData.message || `Profile update failed: ${response.status}`,
-        );
+        let errorData = { message: `Profile update failed: ${response.status}` };
+         try {
+          errorData = await response.json();
+        } catch (e) {
+           console.warn("Could not parse JSON error response from profile update endpoint.")
+        }
+        console.error('AuthContext: API Error updating profile:', errorData);
+        throw new Error(errorData.message);
       }
 
-      const data = await response.json(); // Expect { message: string, user: FrontendUser }
+      const data = await response.json();
 
       if (!data.user) {
         throw new Error('Profile update response missing user data.');
       }
 
-      // IMPORTANT: Update the user state in the context with the fresh data from the API
-      setUser(data.user);
-      console.log('User profile updated successfully in context.');
-      // You might want to show a success notification here using a state management library or prop drilling
-
+      setUser(data.user); // Update context state
+      console.log('AuthContext: User profile updated successfully.');
+      // Fetch a new CSRF token in case the update invalidated the old one (optional but safer)
+      await fetchCsrfToken();
     } catch (error) {
-      console.error('Context updateUser error:', error);
-      // Re-throw the error so the calling component (ProfilePage) can catch it and display a message
-      throw error;
+      console.error('AuthContext: updateUser error:', error);
+      throw error; // Re-throw for the component
     }
+    // Removed duplicate catch block
   };
 
   // --- Effect to check initial authentication status on mount ---
-  // This runs only on the client-side after the component mounts
   useEffect(() => {
     console.log(
-      'AuthProvider mounted (Client-side). Checking initial session status...',
+      'AuthProvider mounted. Checking initial session status...',
     );
-    // On mount, check for an existing session by calling the /api/auth/session endpoint
     fetchUserSession();
-
-    // We no longer need to manage token state or localStorage here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array ensures this runs only once on initial mount
+  }, []);
 
   // --- Value provided by the context ---
   const value: AuthContextType = {
@@ -263,9 +324,9 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
     logout,
     isLoading,
     updateUser,
+    // csrfToken, // Expose token if needed
   };
 
-  // Render the provider with the context value
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 

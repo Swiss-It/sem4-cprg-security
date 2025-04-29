@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 import passport from 'passport';
 import { body, cookie, validationResult } from 'express-validator';
 import { User } from 'server/models/User';
+import csurf from 'csurf';
 import { redirect } from 'react-router';
 import { authenticateJWT, generateToken } from 'server/middleware/authMiddleware';
 
@@ -13,7 +14,7 @@ const setJwtCookie = (res: Response, token: string) => {
     res.cookie('access_token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax', // Changed from strict due to frontend backend URL mismatch
+        sameSite: 'strict',
         maxAge: 60 * 60 * 24 * 30, // 30 days
     });
 };
@@ -27,6 +28,15 @@ const clearJWTCookie = (res: Response) => {
         expires: new Date(0), //
     });
 };
+
+// Csurf Protection
+const csrfProtection = csurf({
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  },
+});
 
 //Moving the Validation middleware to make it global for registration and login
 const validateRegistration = [
@@ -43,6 +53,14 @@ const validateLogin = [ // Message is vague to prevent account enumeration
 // Register route
 router.post(
     '/register',
+    csrfProtection, // <-- Apply CSRF protection middleware HERE
+  (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        // Send validation error, don't proceed to passport
+        return res.status(401).json({ message: 'Invalid email or password' });
+        // Or return res.status(400).json({ errors: errors.array() });
+    },
     validateRegistration,
     async (req: Request, res: Response, next: NextFunction) => {
         const errors = validationResult(req);
@@ -81,7 +99,7 @@ router.post(
 );
 
 // Login route
-router.post('/login', validateLogin, (req: Request, res: Response, next: NextFunction) => {
+router.post('/login', csrfProtection, validateLogin, (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
       res.status(401).json({ message: 'Invalid email or password' });
@@ -153,7 +171,7 @@ router.get(
 
 
 // Logout route
-router.post('/logout', (req: Request, res: Response, next: NextFunction) => {
+router.post('/logout', csrfProtection, (req: Request, res: Response, next: NextFunction) => {
     console.log('JWT logout request received.');
 
     //Clear the httponly cookie
@@ -167,7 +185,7 @@ router.post('/logout', (req: Request, res: Response, next: NextFunction) => {
 
 // User route
 // Protecte route to get user data based on JWT token provided in Authorization header
-router.get('/session', authenticateJWT, (req: Request, res: Response) => {
+router.get('/session', csrfProtection, authenticateJWT, (req: Request, res: Response) => {
     
     const userObject = req.user?._doc || req.user;
 
@@ -185,10 +203,7 @@ router.get('/session', authenticateJWT, (req: Request, res: Response) => {
 
 // Profile update route
 router.put(
-  '/profile',
-  authenticateJWT,
-  // Optional: Add express-validator checks for username, email, bio if desired
-  async (req: Request, res: Response) => {
+  '/profile',csrfProtection, authenticateJWT, async (req: Request, res: Response) => {
     try {
       const userId = req.user?._id;
       if (!userId) {

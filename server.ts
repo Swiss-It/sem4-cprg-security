@@ -8,6 +8,7 @@ import path from 'path';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
+import csurf from 'csurf'
 
 // Route Impoorts
 import authenticateRoutes from './server/routes/authenticateRoutes';
@@ -67,11 +68,26 @@ if (NODE_ENV !== 'production') {
     console.log('Production environment detected. Assuming HTTPS is handled by a reverse proxy or load balancer.');
 }
 
-//Middleware
+//Middleware for managing roles
 import {
   authenticateJWT,
   checkRole,
 } from './server/middleware/authMiddleware';
+
+// Configure Helmet with HTTPS
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      "script-src": ["'self'", "https://cdn.tailwindcss.com"],
+    },
+  },
+  hsts: sslOptions ? {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true
+  } : false,
+}));
 app.use(express.json());
 
 const frontendUrl = FRONTEND_URL; // e.g., https://localhost:5173
@@ -103,24 +119,24 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
-// Configure Helmet with HTTPS
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-      "script-src": ["'self'", "https://cdn.tailwindcss.com"],
-    },
-  },
-  hsts: sslOptions ? {
-      maxAge: 31536000,
-      includeSubDomains: true,
-      preload: true
-  } : false,
-}));
-
 // This take our passport config and initializes it
 import passport from './server/auth/passportConfig';
 app.use(passport.initialize());
+
+// Csurf Protection
+const csrfProtection = csurf({
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    // Consider adding 'maxAge' if desired
+  },
+});
+
+app.get('/api/csrf-token', csrfProtection, (req, res) => {
+  // Send the generated token to the client
+  res.json({ csrfToken: req.csrfToken() });
+});
 
 const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -134,7 +150,7 @@ app.use((req, res, next) => {
 });
 
 app.use('/api/auth', authRateLimiter, authenticateRoutes);
-app.use('/api/admin', authenticateJWT, checkRole('admin'), adminRoutes);
+app.use('/api/admin', authenticateJWT, checkRole('admin'), csrfProtection, adminRoutes);
 
 //This is for connecting to Mongo DB
 mongoose.connect(MONGO_URI)
@@ -143,6 +159,18 @@ mongoose.connect(MONGO_URI)
     console.error('MongoDB Connection Error:', err);
     process.exit(1);
   });
+
+  // Custom error handling for CSRF tokens
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err.code === 'EBADCSRFTOKEN') {
+    console.error('CSRF Token Error:', err.message);
+    // Handle CSRF token errors here - typically send a 403 Forbidden
+    res.status(403).json({ message: 'Invalid CSRF token' });
+  } else {
+    // Pass other errors along
+    next(err);
+  }
+});
 
 //This middleware helps find errors
 app.use(
