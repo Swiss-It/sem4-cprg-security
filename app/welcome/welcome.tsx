@@ -5,7 +5,7 @@ import logoLight from "./talson-logo-light.svg";
 
 export function Welcome() {
   return (
-    <main className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
+    <main className="flex items-center justify-center min-h-screen bg-black dark:bg-black">
       <div className="flex flex-col items-center gap-8"> {/* Adjusted gap */}
         <div className="w-[300px] max-w-[100vw] p-4"> {/* Adjusted width */}
           <img
