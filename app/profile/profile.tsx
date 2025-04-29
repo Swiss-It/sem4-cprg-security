@@ -1,97 +1,108 @@
 // app/profile/profile.tsx
-import React, { useState, useEffect} from 'react'; // Import React hooks
-import type { FormEvent } from 'react'; // Import type for FormEvent
-import { useAuth } from '../lib/AuthContext'; // Adjust path to your AuthContext
-import { Link } from 'react-router';
+import React, { useState, useEffect } from 'react';
+import type { FormEvent } from 'react';
+import { useAuth } from '../lib/AuthContext';
+import { Link } from 'react-router'; // <-- Ensure using react-router-dom
 
 export function ProfilePage() {
-  // Get user data, update function, and loading status from context
-  const { user, updateUser, isLoading: authLoading } = useAuth();
+  const { user, updateUser, isLoading: authLoading, requestPasswordReset } =
+    useAuth(); // Add requestPasswordReset
 
-  // State for form fields - initialize empty, populate in useEffect
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState(''); // For changing password
+  // const [password, setPassword] = useState(''); // --- REMOVE ---
   const [bio, setBio] = useState('');
 
-  // State for feedback messages and submission status
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // --- NEW: State for password reset request ---
+  const [resetRequestLoading, setResetRequestLoading] = useState(false);
+  const [resetRequestMessage, setResetRequestMessage] = useState('');
+  const [resetRequestError, setResetRequestError] = useState('');
 
-  // Effect to populate form fields when user data loads or changes
   useEffect(() => {
     if (user) {
       setUsername(user.username || '');
       setEmail(user.email || '');
-      setBio(user.bio || ''); // Make sure 'bio' is in your FrontendUser interface if used
+      setBio(user.bio || '');
     }
-  }, [user]); // Dependency array: re-run effect if 'user' object changes
+  }, [user]);
 
-  // Handle form submission
+  // Handle profile update submission
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault(); // Prevent default form submission
-    setErrorMessage(''); // Clear previous messages
+    e.preventDefault();
+    setErrorMessage('');
     setSuccessMessage('');
-    setIsSubmitting(true); // Indicate loading
+    setIsSubmitting(true);
 
     try {
-      // Basic validation
       if (!username || !email) {
         throw new Error('Username and email are required.');
       }
 
-      // Prepare data object for the API call
+      // Prepare data object - NO password included
       const updatedUserData: {
         username: string;
         email: string;
         bio: string;
-        password?: string; // Password is optional
       } = {
         username: username,
         email: email,
         bio: bio,
       };
-      // Only include the password field if the user entered something
-      if (password) {
-        updatedUserData.password = password;
-      }
 
-      // Call the updateUser function from AuthContext (defined in Step 6)
-      await updateUser(updatedUserData);
+      await updateUser(updatedUserData); // Call context function
 
-      // If updateUser succeeds:
       setSuccessMessage('Profile updated successfully!');
-      setPassword(''); // Clear password field after successful update
-
+      // setPassword(''); // --- REMOVE ---
     } catch (error: any) {
-      // If updateUser fails (throws an error):
       console.error('Profile update failed:', error);
       setErrorMessage(
         error.message || 'Failed to update profile. Please try again.',
       );
     } finally {
-      // Always run this, whether success or failure
-      setIsSubmitting(false); // Stop indicating loading
+      setIsSubmitting(false);
     }
   };
 
-  // Show loading state while auth context is checking session
-  if (authLoading) {
+  // --- NEW: Handle Password Reset Request ---
+  const handleRequestReset = async () => {
+    if (!user?.email) {
+      setResetRequestError('User email not found.');
+      return;
+    }
+    setResetRequestLoading(true);
+    setResetRequestMessage('');
+    setResetRequestError('');
+    try {
+      const message = await requestPasswordReset(user.email);
+      setResetRequestMessage(message); // Display the generic success message
+    } catch (error: any) {
+      console.error('Password reset request failed:', error);
+      setResetRequestError(
+        error.message || 'Failed to send reset instructions.',
+      );
+    } finally {
+      setResetRequestLoading(false);
+    }
+  };
+
+  if (authLoading && !user) { // Show loading only if user isn't loaded yet
     return <div>Loading profile...</div>;
   }
 
-  // Should be handled by ProtectedRoute, but good fallback
   if (!user) {
     return <div>User not found. Please log in.</div>;
   }
 
-  // Render the form
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-md mt-10">
-      <h1 className="text-3xl font-bold text-black mb-6">Your Profile</h1>
+    <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-md mt-10 dark:bg-gray-800">
+      <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">
+        Your Profile
+      </h1>
 
-      {/* Success Message */}
+      {/* Profile Update Messages */}
       {successMessage && (
         <div
           className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4"
@@ -100,8 +111,6 @@ export function ProfilePage() {
           {successMessage}
         </div>
       )}
-
-      {/* Error Message */}
       {errorMessage && (
         <div
           className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
@@ -111,12 +120,13 @@ export function ProfilePage() {
         </div>
       )}
 
+      {/* Profile Update Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Username Field */}
         <div>
           <label
             htmlFor="username"
-            className="block text-sm font-medium text-black"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
           >
             Username
           </label>
@@ -126,7 +136,8 @@ export function ProfilePage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-black"
+            disabled={isSubmitting || authLoading}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 disabled:opacity-50"
           />
         </div>
 
@@ -134,7 +145,7 @@ export function ProfilePage() {
         <div>
           <label
             htmlFor="email"
-            className="block text-sm font-medium text-black"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
           >
             Email
           </label>
@@ -144,34 +155,18 @@ export function ProfilePage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-black"
+            disabled={isSubmitting || authLoading}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 disabled:opacity-50"
           />
         </div>
 
-        {/* New Password Field */}
-        <div>
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-black"
-          >
-            New Password (optional)
-          </label>
-          <input
-            type="password"
-            id="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Leave blank to keep current password"
-            autoComplete="new-password"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-black"
-          />
-        </div>
+        {/* --- REMOVED: New Password Field --- */}
 
         {/* Bio Field */}
         <div>
           <label
             htmlFor="bio"
-            className="block text-sm font-medium text-black"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
           >
             Bio
           </label>
@@ -180,7 +175,8 @@ export function ProfilePage() {
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             rows={3}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-black"
+            disabled={isSubmitting || authLoading}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 disabled:opacity-50"
           />
         </div>
 
@@ -188,25 +184,65 @@ export function ProfilePage() {
         <div>
           <button
             type="submit"
-            disabled={isSubmitting} // Disable button while processing
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+            disabled={isSubmitting || authLoading}
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
           >
             {isSubmitting ? 'Updating...' : 'Update Profile'}
           </button>
         </div>
       </form>
+
+      {/* --- NEW: Password Reset Section --- */}
+      <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+          Password Settings
+        </h2>
+        {/* Password Reset Messages */}
+        {resetRequestMessage && (
+          <div
+            className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded relative mb-4"
+            role="alert"
+          >
+            {resetRequestMessage}
+          </div>
+        )}
+        {resetRequestError && (
+          <div
+            className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
+            role="alert"
+          >
+            {resetRequestError}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={handleRequestReset}
+          disabled={resetRequestLoading || authLoading}
+          className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-gray-600 dark:text-gray-200 dark:border-gray-500 dark:hover:bg-gray-500 disabled:opacity-50"
+        >
+          {resetRequestLoading
+            ? 'Sending Request...'
+            : 'Request Password Reset Email'}
+        </button>
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+          If you need to change your password, request a reset link to be sent
+          to your email address ({user.email}).
+        </p>
+      </div>
+
       {/* Back to Dashboard Button */}
-<div>
-   <Link
-    to="/dashboard" // Link to your dashboard route
-    className=" w-full flex justify-center mt-5 py-3 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700 dark:focus:ring-offset-gray-900"
-  >
-    Back to Dashboard
-  </Link>
-</div>
+      <div className="mt-6">
+        <Link
+          to="/dashboard"
+          className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700 dark:focus:ring-offset-gray-900"
+        >
+          Back to Dashboard
+        </Link>
+      </div>
     </div>
   );
 }
+
 
 // Export as default if your file structure requires it
 // export default ProfilePage;

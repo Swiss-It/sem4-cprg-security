@@ -178,7 +178,16 @@ export function LoginPage() {
             </div>
           </div>
 
-          {/* Forgot password link etc. */}
+          <div className="flex items-center justify-end">
+            <div className="text-sm">
+              <Link // Use Link component
+                to="/request-password-reset" // Point to the new route
+                className="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                Forgot your password?
+              </Link>
+            </div>
+          </div>
 
           <div>
             <button

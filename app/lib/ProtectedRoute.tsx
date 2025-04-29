@@ -17,6 +17,17 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const { user, isLoading } = useAuth(); // Get user and loading state from context
   const location = useLocation(); // Get current location to redirect back later
 
+  console.log('[ProtectedRoute Check]', {
+    pathname: location.pathname,
+    isLoading: isLoading,
+    userExists: !!user,
+    userId: user?._id,
+    userRole: user?.role, // <<< Check this value carefully!
+    allowedRoles: allowedRoles,
+    // Check the condition directly
+    roleCheckFails: user && allowedRoles ? !allowedRoles.includes(user.role) : 'N/A (no user or no roles)',
+  });
+
   // 1. Show loading indicator while checking authentication
   if (isLoading) {
     // You can replace this with a nicer spinner component

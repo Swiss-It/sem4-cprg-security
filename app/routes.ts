@@ -13,4 +13,6 @@ export default [
     route("dashboard", "routes/dashboard.tsx"),
     route("profile", "routes/profile.tsx"),
     route("admin", "routes/admin.tsx"),
+    route("request-password-reset", "routes/request-password-reset.tsx"),
+    route("reset-password", "routes/reset-password.tsx"),
 ] satisfies RouteConfig;
